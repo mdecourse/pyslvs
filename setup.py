@@ -3,7 +3,7 @@
 """Compile the Cython libraries of Pyslvs."""
 
 __author__ = "Yuan Chang"
-__copyright__ = "Copyright (C) 2016-2019"
+__copyright__ = "Copyright (C) 2016-2020"
 __license__ = "AGPL"
 __email__ = "pyslvs@gmail.com"
 
@@ -38,6 +38,7 @@ if system() == 'Windows':
     compile_args.append('-Wno-format')
 # Disable NumPy warning
 macros.append(('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION'))
+compiler_directives = {'binding': True}
 
 ext_modules = [Extension(
     src_path.replace(sep, '.') + '.bfgs',
@@ -65,6 +66,8 @@ for place in paths:
             [pth_join(place, source)],
             language="c++"
         ))
+for ext in ext_modules:
+    ext.cython_directives = compiler_directives
 
 
 class Build(build_ext):
