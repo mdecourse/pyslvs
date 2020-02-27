@@ -7,12 +7,10 @@ def link_synthesis(
     nj: int,
     stop_func: Optional[Callable[[], bool]] = None
 ) -> List[Tuple[int, ...]]:
-    """Generate the link assortment."""
     ...
 
 def contracted_link_synthesis(
     link_num_list: Sequence[int],
     stop_func: Optional[Callable[[], bool]] = None
 ) -> List[Tuple[int, ...]]:
-    """Generate the contracted link assortment."""
     ...

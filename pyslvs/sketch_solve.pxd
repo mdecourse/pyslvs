@@ -39,7 +39,7 @@ cdef extern from "bfgs_solver/solve.h" nogil:
         double *rad
 
     struct Constraint:
-        int type
+        unsigned type
         Point *point1
         Point *point2
         Line *line1
@@ -53,32 +53,32 @@ cdef extern from "bfgs_solver/solve.h" nogil:
 
     Constraint PointOnPointConstraint(Point *, Point *);
     Constraint P2PDistanceConstraint(Point *, Point *, double *)
-    Constraint P2PDistanceVertConstraint(Point *, Point *, double *)
-    Constraint P2PDistanceHorzConstraint(Point *, Point *, double *)
+    Constraint P2PDistanceVConstraint(Point *, Point *, double *)
+    Constraint P2PDistanceHConstraint(Point *, Point *, double *)
     Constraint PointOnLineConstraint(Point *, Line *)
     Constraint P2LDistanceConstraint(Point *, Line *, double *)
-    Constraint P2LDistanceVertConstraint(Point *, Line *, double *)
-    Constraint P2LDistanceHorzConstraint(Point *, Line *, double *)
+    Constraint P2LDistanceVConstraint(Point *, Line *, double *)
+    Constraint P2LDistanceHConstraint(Point *, Line *, double *)
     Constraint VerticalConstraint(Line *)
     Constraint HorizontalConstraint(Line *)
     Constraint TangentToCircleConstraint(Line *, Circle *)
     Constraint TangentToArcConstraint(Line *, Arc *)
     Constraint ArcRulesConstraint(Arc *)
     Constraint LineLengthConstraint(Line *)
-    Constraint EqualLegnthConstraint(Line *, Line *)
+    Constraint EqualLengthConstraint(Line *, Line *)
     Constraint ArcRadiusConstraint(Arc *, double *)
     Constraint EqualRadiusArcsConstraint(Arc *, Arc *)
     Constraint EqualRadiusCirclesConstraint(Circle *, Circle *)
-    Constraint EqualRadiusCircArcConstraint(Circle *, Arc *)
+    Constraint EqualRadiusCirclesArcConstraint(Circle *, Arc *)
     Constraint ConcentricArcsConstraint(Arc *, Arc *)
     Constraint ConcentricCirclesConstraint(Circle *, Circle *)
-    Constraint ConcentricCircArcConstraint(Circle *, Arc *)
+    Constraint ConcentricCirclesArcConstraint(Circle *, Arc *)
     Constraint CircleRadiusConstraint(Circle *, double *)
     Constraint InternalAngleConstraint(Line *, Line *, double *)
     Constraint ExternalAngleConstraint(Line *, Line *, double *)
     Constraint PerpendicularConstraint(Line *, Line *)
     Constraint ParallelConstraint(Line *, Line *)
-    Constraint ColinearConstraint(Line *, Line *)
+    Constraint CollinearConstraint(Line *, Line *)
     Constraint PointOnCircleConstraint(Point *, Circle *)
     Constraint PointOnArcConstraint(Point *, Arc *)
     Constraint PointOnLineMidpointConstraint(Point *, Line *)
@@ -91,5 +91,5 @@ cdef extern from "bfgs_solver/solve.h" nogil:
     Constraint LineInternalAngleConstraint(Line *, double *)
     Constraint LineExternalAngleConstraint(Line *, double *)
 
-    int solve(double **, const size_t, Constraint *, const size_t, int)
+    int solve(double **, size_t, Constraint *, size_t, int)
     void derivatives(double **, double *, int, Constraint *, int)

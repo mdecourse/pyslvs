@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# cython: language_level=3, embedsignature=True, cdivision=True
+# cython: language_level=3
 
 """Triangular expressions.
 
@@ -30,7 +30,10 @@ cdef inline str symbol_str(symbol p):
 
 cdef class ExpressionStack:
 
-    """The stack of Python wrapper."""
+    """Triangle solution stack, generated from
+    [`vpoints_configure`](#vpoints_configure).
+    It is pointless to call the constructor.
+    """
 
     cdef void add_pla(self, symbol c1, symbol v1, symbol v2, symbol target):
         cdef Expression e
@@ -86,7 +89,7 @@ cdef class ExpressionStack:
         self.stack.push_back(e)
 
     cpdef list as_list(self):
-        """Turn into normal list."""
+        """Copy the dataset as list object."""
         stack = []
         cdef Expression expr
         for expr in self.stack:
@@ -216,15 +219,17 @@ cpdef ExpressionStack vpoints_configure(
     object inputs,
     dict status = None
 ):
-    """Auto configuration algorithm.
-    
-    For VPoint list.
-    + vpoints_: [vpoint0, vpoint1, ...]
-    + inputs: [(p0, p1), (p0, p2), ...]
-    + status: Dict[int, bint]
-    
-    vpoints will make a copy that we don't want to modified itself.
+    """Generate the Triangle solution stack by mechanism expression `vpoints_`.
+
+    The argument `inputs` is a list of input pairs.
+    The argument `status` will track the configuration of each point, 
+    which is optional.
     """
+    # For VPoint list:
+    # + vpoints_: [vpoint0, vpoint1, ...]
+    # + inputs: [(p0, p1), (p0, p2), ...]
+    # + status: Dict[int, bint]
+    # vpoints will make a copy that we don't want to modified itself
     if inputs is None:
         inputs = ()
     if status is None:

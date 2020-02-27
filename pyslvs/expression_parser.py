@@ -59,11 +59,8 @@ color_names = tuple(sorted(_color_list.keys()))
 def color_rgb(name: str) -> Tuple[int, int, int]:
     """Get color by name.
 
-    Usage:
-    >>> color_rgb("Black")
-    (0, 0, 0)
-    >>> color_rgb("(255, 255, 255)")
-    (255, 255, 255)
+    Get RGB color data by name, return `(0, 0, 0)` if it is invalid.
+    Also support `"(R, G, B)"` string format.
     """
     if name in _color_list:
         return _color_list[name]
@@ -106,52 +103,52 @@ class LinkArgs:
 
 
 _GRAMMAR = Lark(r"""
-    // Number
-    DIGIT: "0".."9"
-    INT: DIGIT+
-    SIGNED_INT: ["+" | "-"] INT
-    DECIMAL: INT "." INT? | "." INT
-    _EXP: ("e" | "E") SIGNED_INT
-    FLOAT: INT _EXP | DECIMAL _EXP?
-    NUMBER: FLOAT | INT
-    SIGNED_NUMBER: ["+" | "-"] NUMBER
+// Number
+DIGIT: "0".."9"
+INT: DIGIT+
+SIGNED_INT: ["+" | "-"] INT
+DECIMAL: INT "." INT? | "." INT
+_EXP: ("e" | "E") SIGNED_INT
+FLOAT: INT _EXP | DECIMAL _EXP?
+NUMBER: FLOAT | INT
+SIGNED_NUMBER: ["+" | "-"] NUMBER
 
-    // Letters
-    LCASE_LETTER: "a".."z"
-    UCASE_LETTER: "A".."Z"
-    LETTER: UCASE_LETTER | LCASE_LETTER | "_"
-    CNAME: LETTER (LETTER | DIGIT)*
+// Letters
+LCASE_LETTER: "a".."z"
+UCASE_LETTER: "A".."Z"
+LETTER: UCASE_LETTER | LCASE_LETTER | "_"
+CNAME: LETTER (LETTER | DIGIT)*
 
-    // White space and new line
-    WS: /\s+/
-    CR: /\r/
-    LF: /\n/
-    NEWLINE: (CR? LF)+
-    %ignore WS
-    %ignore NEWLINE
+// White space and new line
+WS: /\s+/
+CR: /\r/
+LF: /\n/
+NEWLINE: (CR? LF)+
+%ignore WS
+%ignore NEWLINE
 
-    // Comment
-    LINE_COMMENT: /#[^\n]*/
-    MULTILINE_COMMENT: /#\[[\s\S]*#\][^\n]*/
-    %ignore LINE_COMMENT
-    %ignore MULTILINE_COMMENT
+// Comment
+LINE_COMMENT: /#[^\n]*/
+MULTILINE_COMMENT: /#\[[\s\S]*#\][^\n]*/
+%ignore LINE_COMMENT
+%ignore MULTILINE_COMMENT
 
-    // Custom data type
-    JOINT_TYPE: "RP" | "R" | "P"
-    COLOR: """ + "|".join(f'"{color}"' for color in color_names) + r"""
-    type: JOINT_TYPE
-    name: CNAME
-    number: SIGNED_NUMBER
-    color_value: INT
+// Custom data type
+JOINT_TYPE: "RP" | "R" | "P"
+COLOR: """ + "|".join(f'"{color}"' for color in color_names) + r"""
+type: JOINT_TYPE
+name: CNAME
+number: SIGNED_NUMBER
+color_value: INT
 
-    // Main grammar
-    joint: "J[" type ["," angle] ["," color] "," point "," link "]"
-    link: "L[" [name ("," name)* ","?] "]"
-    point: "P[" number "," number "]"
-    angle: "A[" number "]"
-    color: "color[" (("(" color_value ("," color_value) ~ 2 ")") | COLOR) "]"
-    mechanism: "M[" [joint ("," joint)* ","?] "]"
-    ?start: mechanism
+// Main grammar
+joint: "J[" type ["," angle] ["," color] "," point "," link "]"
+link: "L[" [name ("," name)* ","?] "]"
+point: "P[" number "," number "]"
+angle: "A[" number "]"
+color: "color[" (("(" color_value ("," color_value) ~ 2 ")") | COLOR) "]"
+mechanism: "M[" [joint ("," joint)* ","?] "]"
+?start: mechanism
 """, parser='lalr')
 
 
@@ -306,22 +303,22 @@ _vpoint_translator = _VPointsTrans()
 
 
 def parse_params(expr: str) -> List[PointArgs]:
-    """Using to parse the expression and return arguments."""
+    """Parse mechanism expression into VPoint constructor arguments."""
     return _params_translator.transform(_GRAMMAR.parse(expr))
 
 
 def parse_pos(expr: str) -> List[_Coord]:
-    """Using to parse the expression and return arguments."""
+    """Parse mechanism expression into coordinates."""
     return _pos_translator.transform(_GRAMMAR.parse(expr))
 
 
 def parse_vpoints(expr: str) -> List[VPoint]:
-    """Parse as VPoints."""
+    """Parse mechanism expression into VPoint objects."""
     return _vpoint_translator.transform(_GRAMMAR.parse(expr))
 
 
 def parse_vlinks(expr: str) -> List[VLink]:
-    """Parse as VLinks."""
+    """Parse mechanism expression into VLink objects."""
     return get_vlinks(parse_vpoints(expr))
 
 
@@ -330,7 +327,7 @@ def _sorted_pair(a: int, b: int) -> Tuple[int, int]:
 
 
 def edges_view(graph: Graph) -> Iterator[Tuple[int, Tuple[int, int]]]:
-    """This generator can keep the numbering be consistent."""
+    """The iterator will yield the sorted edges from `graph`."""
     yield from enumerate(sorted(_sorted_pair(n1, n2) for n1, n2 in graph.edges))
 
 
@@ -341,18 +338,17 @@ def graph2vpoints(
     same: Optional[Dict[int, int]] = None,
     grounded: Optional[int] = None
 ) -> List[VPoint]:
-    """Change NetworkX graph into VPoints.
+    """Transform `graph` into [VPoint] objects. The vertices are mapped to links.
 
-    cus: custom vertices (not joint)
-        {node_name: link_number}
-    same: multiple joints
-        {n1: n2, n3: n2} => (n1 as n2) and (n3 as n2)
+    + `pos`: Position for each vertices.
+    + `cus`: Extra points on the specific links.
+    + `same`: Multiple joint setting. The joints are according to [`edges_view`](#edges_view).
+    + `grounded`: The ground link of vertices.
     """
     if cus is None:
         cus = {}
     if same is None:
         same = {}
-
     same_r: Dict[int, List[int]] = {}
     for k, v in same.items():
         if v in same_r:

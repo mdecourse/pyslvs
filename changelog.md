@@ -1,6 +1,9 @@
 # Version 20.02
 
-+ None
++ Change example list and collection list as a function.
++ Add an iterator for grabbing examples and collections names.
++ Function name typo corrections.
++ Add "get_include" function for setup.
 
 # Version 20.01
 

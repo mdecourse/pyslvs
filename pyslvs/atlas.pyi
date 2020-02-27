@@ -9,12 +9,10 @@ def conventional_graph(
     no_degenerate: int = 1,
     stop_func: Optional[Callable[[], bool]] = None
 ) -> List[Graph]:
-    """Linkage mechanism topological function."""
     ...
 
 def contracted_graph(
     link_num: Sequence[int],
     stop_func: Optional[Callable[[], bool]] = None
 ) -> List[Graph]:
-    """Get contracted graph by link assortment."""
     ...

@@ -8,5 +8,4 @@ def external_loop_layout(
     node_mode: bool,
     scale: float = 1.
 ) -> Dict[int, Tuple[float, float]]:
-    """Layout position decided by outer loop (max cycle)."""
     ...

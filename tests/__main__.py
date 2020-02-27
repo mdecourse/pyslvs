@@ -9,7 +9,6 @@ __email__ = "pyslvs@gmail.com"
 
 from unittest import TestCase
 from math import sqrt, radians
-from copy import deepcopy
 from pyslvs import (
     Coordinate,
     SolverSystem,
@@ -33,11 +32,12 @@ from pyslvs import (
     parse_vpoints,
     example_list,
     collection_list,
+    norm_path,
 )
 from pyslvs.metaheuristics import ALGORITHM, AlgorithmType, PARAMS
 from .obj_func import TestObj
 
-_four_bar = deepcopy(collection_list["Four bar linkage mechanism"])
+_four_bar = collection_list("Four bar linkage mechanism")
 _four_bar.update({
     'expression': parse_vpoints(_four_bar['expression']),
     'placement': {0: (-70, -70, 50), 1: (70, -70, 50)},
@@ -217,7 +217,7 @@ class CoreTest(TestCase):
         + Test data collecting function.
         + Test expression solving function.
         """
-        expr, inputs = example_list["Jansen's linkage (Single)"]
+        expr, inputs = example_list("Jansen's linkage (Single)")
         vpoints = parse_vpoints(expr)
         self.assertEqual(8, len(vpoints))
         exprs = vpoints_configure(vpoints, inputs)
@@ -253,7 +253,7 @@ class CoreTest(TestCase):
 
     def test_solving_bfgs(self):
         """Test Sketch Solve kernel."""
-        expr, _ = example_list["Jansen's linkage (Single)"]
+        expr, _ = example_list("Jansen's linkage (Single)")
         system = SolverSystem(parse_vpoints(expr), {(0, 1): 0.})
         result = system.solve()
         x, y = result[7]
@@ -290,20 +290,15 @@ class CoreTest(TestCase):
         t_f = algorithm.history()
         self.assertTrue(10 >= t_f[1][0] - t_f[0][0])
 
-    def test_algorithm_rga(self):
-        """Real-coded genetic algorithm."""
+    def test_algorithms(self):
+        """Test algorithms."""
+        # Real-coded genetic algorithm
         self.algorithm_generic(AlgorithmType.RGA)
-
-    def test_algorithm_firefly(self):
-        """Firefly algorithm."""
+        # Firefly algorithm
         self.algorithm_generic(AlgorithmType.Firefly)
-
-    def test_algorithm_de(self):
-        """Differential evolution."""
+        # Differential evolution
         self.algorithm_generic(AlgorithmType.DE)
-
-    def test_algorithm_tlbo(self):
-        """Teaching learning based optimization."""
+        # Teaching learning based optimization
         self.algorithm_generic(AlgorithmType.TLBO)
 
     def test_obj_func(self):
