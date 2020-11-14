@@ -8,7 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build*/
+*build*/
 develop-eggs/
 dist/
 downloads/
@@ -103,9 +103,10 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-#Cython source
+# Cython source
 pyslvs/*.cpp
-tests/*.cpp
+pyslvs/graph/*.cpp
+test/*.cpp
 
-#Qt project
-*.pro.user
+# JetBrains
+.idea/

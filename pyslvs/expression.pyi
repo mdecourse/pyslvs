@@ -2,24 +2,26 @@
 
 from typing import Tuple, List, Iterable, Sequence, Callable, Optional, ClassVar
 from enum import IntEnum, auto
+from numpy import ndarray
 
 # Color type must be a RGB data
 _Color = Tuple[int, int, int]
-_Coord = Tuple[float, float]
 
 def get_vlinks(vpoints: Iterable[VPoint]) -> List[VLink]:
     ...
 
-class Coordinate:
-
+class Coord:
     x: float
     y: float
 
-    def __init__(self, x: float, y: float) -> None:
+    def __init__(self, x: float, y: float):
         """The constructor of Coordinate class."""
         ...
 
-    def distance(self, p: Coordinate) -> float:
+    def distance(self, p: Coord) -> float:
+        ...
+
+    def slope_angle(self, p: Coord) -> float:
         ...
 
     def is_nan(self) -> bool:
@@ -32,9 +34,8 @@ class VJoint(IntEnum):
     RP = auto()
 
 class VPoint:
-
     links: Sequence[str]
-    c: Tuple[_Coord, _Coord]
+    c: ndarray
     type: VJoint
     color: Optional[_Color]
     color_str: str
@@ -82,6 +83,14 @@ class VPoint:
         ...
 
     @property
+    def sx(self) -> float:
+        ...
+
+    @property
+    def sy(self) -> float:
+        ...
+
+    @property
     def cx(self) -> float:
         ...
 
@@ -114,6 +123,9 @@ class VPoint:
     def disable_offset(self) -> None:
         ...
 
+    def is_slider(self) -> bool:
+        ...
+
     def distance(self, p: VPoint) -> float:
         ...
 
@@ -129,6 +141,9 @@ class VPoint:
     def slope_angle(self, p: VPoint, num1: int = 2, num2: int = 2) -> float:
         ...
 
+    def link_pos(self, link: str) -> Coord:
+        ...
+
     def grounded(self) -> bool:
         ...
 
@@ -141,17 +156,19 @@ class VPoint:
     def no_link(self) -> bool:
         ...
 
-    def is_slot_link(self, link_name: str) -> bool:
+    def is_slot_link(self, link: str) -> bool:
         ...
 
     def expr(self) -> str:
+        ...
+
+    def to_coord(self, ind: int) -> Coord:
         ...
 
     def __getitem__(self, i: int) -> float:
         ...
 
 class VLink:
-
     name: str
     color_str: str
     color: Optional[_Color]
@@ -174,6 +191,9 @@ class VLink:
         ...
 
     def set_points(self, points: Iterable[int]) -> None:
+        ...
+
+    def points_pos(self, vpoints: Iterable[VPoint]) -> Sequence[Coord]:
         ...
 
     def __contains__(self, point: int) -> bool:

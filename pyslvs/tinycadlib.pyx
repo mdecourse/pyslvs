@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# cython: language_level=3
+# cython: language_level=3, cdivision=True, boundscheck=False, wraparound=False
+# cython: initializedcheck=False, nonecheck=False
 
 """Tiny CAD library of PMKS symbolic and position analysis.
 
@@ -9,230 +10,128 @@ license: AGPL
 email: pyslvs@gmail.com
 """
 
-from libc.math cimport M_PI, sqrt, sin, cos, atan2, NAN
-from .expression cimport VJoint, VPoint, VLink
-from .triangulation cimport (
-    symbol,
-    symbol_str,
-    Expression,
-    PLA,
-    PLAP,
-    PLLP,
-    PLPP,
-    PXY,
-)
+from libc.math cimport M_PI, sin, cos
+from .expression cimport Coord, VJoint, VPoint, VLink, distance, slope_angle
 from .bfgs cimport SolverSystem
 
-cdef Coordinate _NAN_COORD = Coordinate.__new__(Coordinate, NAN, NAN)
 
-
-cdef inline double radians(double degree) nogil:
-    """Deg to rad."""
-    return degree / 180 * M_PI
-
-
-cpdef Coordinate plap(
-    Coordinate c1,
-    double d0,
-    double a0,
-    Coordinate c2 = None,
-    bint inverse = False
-):
-    """The PLAP function requires two points, one distance and one angle,
-    obtained the position of third point. The unit of `a0` is degree.
-
-    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
-    `d0` correspond to "L0", `a0` correspond to "beta", `return` correspond 
-    to "C".
-    If `c2` is not given, "alpha" will be set to zero.
-
-    ![PLAP](img/PLAP.png)
-
-    Set `inverse` option to `True` can make `a0` value as negative.
-    """
-    cdef double a1 = atan2(c2.y - c1.y, c2.x - c1.x) if c2 is not None else 0
-    if inverse:
-        a1 -= a0
-    else:
-        a1 += a0
-    return Coordinate.__new__(Coordinate, c1.x + d0 * cos(a1), c1.y + d0 * sin(a1))
-
-
-cpdef Coordinate pllp(
-    Coordinate c1,
-    double d0,
-    double d1,
-    Coordinate c2,
-    bint inverse = False
-):
-    """The PLLP function requires two points and two distances, obtained the 
-    position of third point.
-
-    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
-    `d0` correspond to "L0", `d1` correspond to "L1", `return` correspond to 
-    "C".
-
-    ![PLLP](img/PLLP.png)
-
-    Set `inverse` option to `True` can make the result upside down.
-    """
-    cdef double dx = c2.x - c1.x
-    cdef double dy = c2.y - c1.y
-    cdef double d = c1.distance(c2)
-    # No solutions, the circles are separate
-    if d > d0 + d1:
-        return _NAN_COORD
-    # No solutions because one circle is contained within the other
-    if d < abs(d0 - d1):
-        return _NAN_COORD
-    # Circles are coincident and there are an infinite number of solutions
-    if d == 0 and d0 == d1:
-        return _NAN_COORD
-    cdef double a = (d0 * d0 - d1 * d1 + d * d) / (2 * d)
-    cdef double h = sqrt(d0 * d0 - a * a)
-    cdef double xm = c1.x + a * dx / d
-    cdef double ym = c1.y + a * dy / d
-    if inverse:
-        return Coordinate.__new__(Coordinate, xm + h * dy / d, ym - h * dx / d)
-    else:
-        return Coordinate.__new__(Coordinate, xm - h * dy / d, ym + h * dx / d)
-
-
-cpdef Coordinate plpp(
-    Coordinate c1,
-    double d0,
-    Coordinate c2,
-    Coordinate c3,
-    bint inverse = False
-):
-    """The PLLP function requires three points and one distance, obtained the 
-    position of fourth point.
-
-    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
-    `c3` correspond to "C", `d0` correspond to "L0", `return` correspond to "D".
-
-    ![PLPP](img/PLPP.png)
-
-    Set `inverse` option to `True` can make the result to the another side
-    between `c1` and line `c2` `c3`.
-    """
-    cdef double line_mag = c2.distance(c3)
-    cdef double dx = c3.x - c2.x
-    cdef double dy = c3.y - c2.y
-    cdef double u = ((c1.x - c2.x) * dx + (c1.y - c2.y) * dy) / (line_mag * line_mag)
-    cdef Coordinate inter = Coordinate.__new__(Coordinate, c2.x + u * dx, c2.y + u * dy)
-    # Test distance between point A and intersection
-    cdef double d = c1.distance(inter)
-    if d > d0:
-        # No intersection
-        return _NAN_COORD
-    elif d == d0:
-        # One intersection point
-        return inter.x, inter.y
-    # Two intersection points
-    d = sqrt(d0 * d0 - d * d) / line_mag
-    dx *= d
-    dy *= d
-    if inverse:
-        return Coordinate.__new__(Coordinate, inter.x - dx, inter.y - dy)
-    else:
-        return Coordinate.__new__(Coordinate, inter.x + dx, inter.y + dy)
-
-
-cpdef Coordinate pxy(Coordinate c1, double x, double y):
-    """The PXY function requires one point and offset values, obtained the 
+def pxy(Coord c1, double x, double y):
+    """The PXY function requires one point and offset values, get the
     position of second point.
 
     In the following picture, `c1` correspond to "A", `d0` correspond to "X",
     `d1` correspond to "Y", `return` correspond to "B", the sign of value are
     correspond to coordinate system.
 
-    ![PXY](img/PXY.png)
+    ![pxy](img/pxy.png)
     """
-    return Coordinate.__new__(Coordinate, c1.x + x, c1.y + y)
+    cdef CCoord c = cpxy(CCoord(c1.x, c1.y), x, y)
+    return Coord.__new__(Coord, c.x, c.y)
 
 
-cdef inline str str_between(str s, str front, str back):
-    """Get the string that is inside of parenthesis."""
-    return s[s.find(front) + 1:s.find(back)]
+def ppp(Coord c1, Coord c2, Coord c3):
+    """The PPP function is used to solve parallel linkage.
 
+    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
+    `c3` correspond to "C", `return` correspond to "D".
 
-cdef inline str str_before(str s, str front):
-    """Get the string that is front of parenthesis."""
-    return s[:s.find(front)]
-
-
-cpdef void expr_parser(ExpressionStack exprs, dict data_dict):
-    """Solve and update information of the triangle expression `exprs` to 
-    `data_dict`.
-    The argument `exprs` can be obtained by
-    [`vpoints_configure`](#vpoints_configure)
-    and [`ExpressionStack.as_list()`](#expressionstackas_list) method.
-
-    This function is already included in [`expr_solving`](#expr_solving),
-    not recommended for direct use.
+    ![ppp](img/ppp.png)
     """
-    # Update data
-    # + exprs: [("PLAP", "P0", "L0", "a0", "P1", "P2"), ..."]
-    # + data_dict: {'a0':0., 'L1':10., 'A':(30., 40.), ...}
-    cdef symbol target
-    cdef Coordinate coord, coord1, coord2, coord3
-    cdef Expression expr
-    for expr in exprs.stack:
-        coord = _NAN_COORD
-        if expr.func in {PLA, PLAP}:
-            coord1 = data_dict[symbol_str(expr.c1)]
-            if expr.func == PLA:
-                target = expr.c2
-                coord = plap(
-                    coord1,
-                    data_dict[symbol_str(expr.v1)],
-                    data_dict[symbol_str(expr.v2)]
-                )
-            else:
-                target = expr.c3
-                coord2 = data_dict[symbol_str(expr.c2)]
-                coord = plap(
-                    coord1,
-                    data_dict[symbol_str(expr.v1)],
-                    data_dict[symbol_str(expr.v2)],
-                    coord2,
-                    expr.op
-                )
-        elif expr.func == PLLP:
-            target = expr.c3
-            coord1 = data_dict[symbol_str(expr.c1)]
-            coord2 = data_dict[symbol_str(expr.c2)]
-            coord = pllp(
-                coord1,
-                data_dict[symbol_str(expr.v1)],
-                data_dict[symbol_str(expr.v2)],
-                coord2,
-                expr.op
-            )
-        elif expr.func == PLPP:
-            target = expr.c4
-            coord1 = data_dict[symbol_str(expr.c1)]
-            coord2 = data_dict[symbol_str(expr.c2)]
-            coord3 = data_dict[symbol_str(expr.c3)]
-            coord = plpp(
-                coord1,
-                data_dict[symbol_str(expr.v1)],
-                coord2,
-                coord3,
-                expr.op
-            )
-        elif expr.func == PXY:
-            target = expr.c2
-            coord1 = data_dict[symbol_str(expr.c1)]
-            coord = pxy(
-                coord1,
-                data_dict[symbol_str(expr.v1)],
-                data_dict[symbol_str(expr.v2)]
-            )
-        else:
-            raise ValueError("unsupported function")
-        data_dict[symbol_str(target)] = coord
+    cdef CCoord c = cppp(CCoord(c1.x, c1.y), CCoord(c2.x, c2.y),
+                         CCoord(c3.x, c3.y))
+    return Coord.__new__(Coord, c.x, c.y)
+
+
+def plap(
+    Coord c1,
+    double d0,
+    double a0,
+    Coord c2 = None,
+    bint inverse = False
+):
+    """The PLAP function requires two points, one distance and one angle,
+    obtained the position of third point. The unit of `a0` is degree.
+
+    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
+    `d0` correspond to "L0", `a0` correspond to "beta", `return` correspond
+    to "C".
+    If `c2` is not given, "alpha" will be set to zero.
+
+    ![plap](img/plap.png)
+
+    Set `inverse` option to `True` can make `a0` value as negative.
+    """
+    if c2 is None:
+        c2 = c1
+    cdef CCoord c = cplap(CCoord(c1.x, c1.y), d0, a0, CCoord(c2.x, c2.y), inverse)
+    return Coord.__new__(Coord, c.x, c.y)
+
+
+def pllp(
+    Coord c1,
+    double d0,
+    double d1,
+    Coord c2,
+    bint inverse = False
+):
+    """The PLLP function requires two points and two distances, obtained the
+    position of third point.
+
+    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
+    `d0` correspond to "L0", `d1` correspond to "L1", `return` correspond to
+    "C".
+
+    ![pllp](img/pllp.png)
+
+    Set `inverse` option to `True` can make the result upside down.
+    """
+    cdef CCoord c = cpllp(CCoord(c1.x, c1.y), d0, d1, CCoord(c2.x, c2.y), inverse)
+    return Coord.__new__(Coord, c.x, c.y)
+
+
+def plpp(
+    Coord c1,
+    double d0,
+    Coord c2,
+    Coord c3,
+    bint inverse = False
+):
+    """The PLPP function requires three points and one distance, obtained the
+    position of fourth point.
+
+    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
+    `c3` correspond to "C", `d0` correspond to "L0", `return` correspond to "D".
+
+    ![plpp](img/plpp.png)
+
+    Set `inverse` option to `True` can make the result to the another side
+    between `c1` and line `c2` `c3`.
+    """
+    cdef CCoord c = cplpp(CCoord(c1.x, c1.y), d0, CCoord(c2.x, c2.y),
+                          CCoord(c3.x, c3.y), inverse)
+    return Coord.__new__(Coord, c.x, c.y)
+
+
+def palp(
+    Coord c1,
+    double a0,
+    double d0,
+    Coord c2,
+    bint inverse = False
+):
+    """The PALP function requires two points, one angle and one distance,
+    obtained the position of fourth point.
+
+    In the following picture, `c1` correspond to "A", `c2` correspond to "B",
+    `d0` correspond to "L0", `a0` correspond to "alpha", `return` correspond
+    to "C".
+
+    ![palp](img/palp.png)
+
+    Set `inverse` option to `True` can make the result upside down.
+    """
+    cdef CCoord c = cpalp(CCoord(c1.x, c1.y), a0, d0, CCoord(c2.x, c2.y), inverse)
+    return Coord.__new__(Coord, c.x, c.y)
 
 
 cpdef int vpoint_dof(object vpoints):
@@ -244,24 +143,19 @@ cpdef int vpoint_dof(object vpoints):
     # First link is frame
     vlinks = {VLink.FRAME}
     cdef int link_count
-    cdef VPoint vpoint
-    for vpoint in vpoints:
-        link_count = len(vpoint.links)
-        if not link_count > 1:
+    cdef VPoint vp
+    for vp in vpoints:
+        link_count = len(vp.links)
+        if link_count < 2:
             # If a point doesn't have two more links, it can not be call a 'joint'.
             continue
-        vlinks.update(vpoint.links)
-        if vpoint.type == VJoint.R:
+        vlinks.update(vp.links)
+        if vp.type in {VJoint.R, VJoint.P}:
             j1 += link_count - 1
-        elif vpoint.type == VJoint.P:
-            if link_count > 2:
-                j1 += link_count - 2
-            j1 += 1
-        elif vpoint.type == VJoint.RP:
-            if link_count > 2:
-                j1 += link_count - 2
+        elif vp.type == VJoint.RP:
+            j1 += link_count - 2
             j2 += 1
-    return 3 * (len(vlinks) - 1) - (2 * j1) - j2
+    return 3 * (len(vlinks) - 1) - 2 * j1 - j2
 
 
 cdef inline int base_friend(int node, object vpoints):
@@ -274,287 +168,191 @@ cdef inline int base_friend(int node, object vpoints):
             return i
 
 
-cpdef tuple data_collecting(ExpressionStack exprs, dict mapping, object vpoints_):
-    """Data transform function of Triangular method.
-    The triangle expression stack `expr` is generated from
-    [`vpoints_configure`](#vpoints_configure).
-    The information data `mapping` map the symbols to the indicator of 
-    `vpoints_`.
+cdef bint preprocessing(EStack exprs, object vpoints, object inputs,
+                        map[Sym, CCoord] &joint_pos,
+                        map[SwappablePair, double] &link_len,
+                        map[Sym, double] &param):
+    """Data extraction. Return true if input angle is matched DOF.
 
-    This function is already included in [`expr_solving`](#expr_solving),
-    not recommended for direct use.
+    Use "exprs", "vpoints", "angles" and "link_len" to generate solver
+    required data. Please pre-allocate the "joint_pos" and "param".
+
+    C++ objects
+    + "exprs.stack" used for the position solution.
+    + "joint_pos" used for joint position.
+    + "link_len" used for custom link length except from calculation.
+      (The link pairs must be exist in the solution.)
+    + "param" used for store angles and link length.
     """
-    vpoints = list(vpoints_)
+    vpoints = list(vpoints)
+    cdef int vp_dof = vpoint_dof(vpoints)
     # First, we create a "VLinks" that can help us to
-    # find a relationship just like adjacency matrix.
-    cdef int node
-    cdef VPoint vpoint
+    # find a relationship just like adjacency matrix
+    cdef int node, base
+    cdef VPoint vp, vp2
     vlinks = {}
-    for node, vpoint in enumerate(vpoints):
-        for link in vpoint.links:
+    for node, vp in enumerate(vpoints):
+        for link in vp.links:
             # Add as vlink.
             if link not in vlinks:
                 vlinks[link] = [node]
             else:
                 vlinks[link].append(node)
-
-    # Replace the P joints and their friends with RP joint.
-    # DOF must be same after properties changed.
-    cdef int base
-    cdef double x, y
-    cdef VPoint vpoint_
-    links = set()
+    # Replace the P joints and their friends with RP joint
+    # DOF must be same after properties changed
+    cdef double x, y, angle
     for base in range(len(vpoints)):
-        vpoint = vpoints[base]
-        if vpoint.type != VJoint.P:
+        vp = vpoints[base]
+        if vp.type != VJoint.P:
             continue
-        for link in vpoint.links[1:]:
-            links.clear()
+        for link in vp.links[1:]:
             for node in vlinks[link]:
-                vpoint_ = vpoints[node]
-                if node == base or vpoint_.type in {VJoint.P, VJoint.RP}:
+                vp2 = vpoints[node]
+                if node == base or vp2.is_slider():
                     continue
-                links.update(vpoint_.links)
-                x, y = vpoint_.c[0]
-                vpoints[node] = VPoint.c_slider_joint(
-                    [vpoint.links[0]] + [
-                        link_ for link_ in vpoint_.links
-                        if (link_ not in vpoint.links)
-                    ],
-                    VJoint.RP,
-                    vpoint.angle,
-                    x,
-                    y
-                )
-
-    # Reverse mapping, exclude specified link length.
-    mapping_r = {}
-    length = {}
-    data_dict = {}
-    for k, v in mapping.items():
-        if type(k) is int:
-            mapping_r[v] = k
-            if v in mapping:
-                x, y = mapping[v]
-                data_dict[v] = Coordinate.__new__(Coordinate, x, y)
-        elif type(k) is tuple:
-            length[frozenset(k)] = v
-
-    pos = []
-    for vpoint in vpoints:
-        if vpoint.type == VJoint.R:
-            pos.append(Coordinate.__new__(Coordinate, vpoint.c[0][0], vpoint.c[0][1]))
-        else:
-            pos.append(Coordinate.__new__(Coordinate, vpoint.c[1][0], vpoint.c[1][1]))
-
-    cdef int i, bf
-    cdef double angle
-    # Add slider slot virtual coordinates.
-    for i, vpoint in enumerate(vpoints):
-        # PLPP dependents.
-        if vpoint.type != VJoint.RP:
+                x = vp2.c[0, 0]
+                y = vp2.c[0, 1]
+                vpoints[node] = VPoint.c_slider_joint([vp.links[0]] + [
+                    link_ for link_ in vp2.links
+                    if link_ not in vp.links
+                ], VJoint.RP, vp.angle, x, y)
+    # Assign joint positions
+    for node, vp in enumerate(vpoints):
+        base = 1 if vp.is_slider() else 0
+        joint_pos[Sym(P_LABEL, node)] = CCoord(vp.c[base, 0], vp.c[base, 1])
+    # Add slider slot virtual coordinates
+    for node, vp in enumerate(vpoints):
+        # PLPP dependencies
+        if vp.type != VJoint.RP:
             continue
-        bf = base_friend(i, vpoints)
-        angle = radians(
-            vpoint.angle -
-            vpoint.slope_angle(vpoints[bf], 1, 0) +
-            vpoint.slope_angle(vpoints[bf], 0, 0)
-        )
-        pos.append(Coordinate.__new__(Coordinate, vpoint.c[1][0] + cos(angle), vpoint.c[1][1] + sin(angle)))
-        mapping_r[f'S{i}'] = len(pos) - 1
-
-    # Add data to 'data_dict' and counting DOF.
+        base = base_friend(node, vpoints)
+        angle = (vp.angle
+                 - vp.slope_angle(vpoints[base], 1, 0)
+                 + vp.slope_angle(vpoints[base], 0, 0)) / 180 * M_PI
+        joint_pos[Sym(S_LABEL, node)] = CCoord(vp.c[1, 0] + cos(angle),
+                                               vp.c[1, 1] + sin(angle))
+    # Scan again to check if the parameter exists
+    # Especially link lengths and angles
     cdef int dof = 0
-    cdef int target
-    cdef Expression expr
-    cdef Coordinate coord1, coord2
-    for expr in exprs.stack:
-        node = mapping_r[symbol_str(expr.c1)]
-
-        # Point 1
-        if symbol_str(expr.c1) not in data_dict:
-            data_dict[symbol_str(expr.c1)] = pos[mapping_r[symbol_str(expr.c1)]]
-
-        if expr.func in {PLA, PLAP}:
-            if expr.func == PLA:
-                target = mapping_r[symbol_str(expr.c2)]
-            else:
-                target = mapping_r[symbol_str(expr.c3)]
-            # Link 1
-            pair = frozenset({node, target})
-            if pair in length:
-                data_dict[symbol_str(expr.v1)] = length[pair]
-            else:
-                coord1 = pos[node]
-                coord2 = pos[target]
-                data_dict[symbol_str(expr.v1)] = coord1.distance(coord2)
-            # Point 2
-            if expr.func == PLAP and symbol_str(expr.c2) not in data_dict:
-                data_dict[symbol_str(expr.c2)] = pos[mapping_r[symbol_str(expr.c2)]]
-            # Inputs
-            dof += 1
-        elif expr.func == PLLP:
-            target = mapping_r[symbol_str(expr.c3)]
-            # Link 1
-            pair = frozenset({node, target})
-            if pair in length:
-                data_dict[symbol_str(expr.v1)] = length[pair]
-            else:
-                coord1 = pos[node]
-                coord2 = pos[target]
-                data_dict[symbol_str(expr.v1)] = coord1.distance(coord2)
-            # Link 2
-            pair = frozenset({mapping_r[symbol_str(expr.c2)], target})
-            if pair in length:
-                data_dict[symbol_str(expr.v2)] = length[pair]
-            else:
-                coord1 = pos[mapping_r[symbol_str(expr.c2)]]
-                coord2 = pos[target]
-                data_dict[symbol_str(expr.v2)] = coord1.distance(coord2)
-            # Point 2
-            if symbol_str(expr.c2) not in data_dict:
-                data_dict[symbol_str(expr.c2)] = pos[mapping_r[symbol_str(expr.c2)]]
-        elif expr.func == PLPP:
-            target = mapping_r[symbol_str(expr.c4)]
-            # Link 1
-            pair = frozenset({node, target})
-            if pair in length:
-                data_dict[symbol_str(expr.v1)] = length[pair]
-            else:
-                coord1 = pos[node]
-                coord2 = pos[target]
-                data_dict[symbol_str(expr.v1)] = coord1.distance(coord2)
-            # Point 2
-            if symbol_str(expr.c2) not in data_dict:
-                data_dict[symbol_str(expr.c2)] = pos[mapping_r[symbol_str(expr.c2)]]
-        elif expr.func == PXY:
-            target = mapping_r[symbol_str(expr.c2)]
-            coord1 = pos[node]
-            coord2 = pos[target]
-            # X
-            if symbol_str(expr.v1) in mapping:
-                x, y = mapping[symbol_str(expr.v1)]
-                data_dict[symbol_str(expr.v1)] = Coordinate.__new__(Coordinate, x, y)
-            else:
-                data_dict[symbol_str(expr.v1)] = coord2.x - coord1.x
-            # Y
-            if symbol_str(expr.v2) in mapping:
-                x, y = mapping[symbol_str(expr.v2)]
-                data_dict[symbol_str(expr.v2)] = Coordinate.__new__(Coordinate, x, y)
-            else:
-                data_dict[symbol_str(expr.v2)] = coord2.y - coord1.y
-
-    # Other grounded R joints.
-    for i, vpoint in enumerate(vpoints):
-        if vpoint.grounded() and vpoint.type == VJoint.R:
-            x, y = vpoint.c[0]
-            data_dict[mapping[i]] = Coordinate.__new__(Coordinate, x, y)
-
-    return data_dict, dof
+    cdef Expr e
+    cdef SwappablePair pair1, pair2
+    for e in exprs.stack:
+        pair1 = SwappablePair(e.c1.second, e.target.second)
+        pair2 = SwappablePair(e.c2.second, e.target.second)
+        if e.func == PXY:
+            param[e.v1] = joint_pos[e.target].x - joint_pos[e.c1].x
+            param[e.v2] = joint_pos[e.target].y - joint_pos[e.c1].y
+            continue
+        if e.func in {PLLP, PALP}:
+            param[e.v2] = (link_len[pair2]
+                           if link_len.find(pair2) != link_len.end() else
+                           distance(joint_pos[e.c2].x,
+                                    joint_pos[e.c2].y,
+                                    joint_pos[e.target].x,
+                                    joint_pos[e.target].y))
+        if e.func in {PLLP, PLA, PLAP, PLPP}:
+            param[e.v1] = (link_len[pair1]
+                           if link_len.find(pair1) != link_len.end() else
+                           distance(joint_pos[e.c1].x,
+                                    joint_pos[e.c1].y,
+                                    joint_pos[e.target].x,
+                                    joint_pos[e.target].y))
+            if e.func in {PLA, PLAP}:
+                if e.v2.first == I_LABEL:
+                    # Input angles
+                    angle = inputs[pair1.first, pair1.second]
+                    param[e.v2] = angle / 180 * M_PI
+                    dof += 1
+                else:
+                    # A_LABEL
+                    param[e.v2] = slope_angle(joint_pos[e.c1].x,
+                                              joint_pos[e.c1].y,
+                                              joint_pos[e.target].x,
+                                              joint_pos[e.target].y)
+                    if e.func == PLAP:
+                        param[e.v2] -= slope_angle(joint_pos[e.c1].x,
+                                                   joint_pos[e.c1].y,
+                                                   joint_pos[e.c2].x,
+                                                   joint_pos[e.c2].y)
+                if (
+                    (<VPoint>vpoints[e.c1.second]).grounded()
+                    and (<VPoint>vpoints[e.target.second]).grounded()
+                ):
+                    raise ValueError("wrong driver definition")
+    return dof <= len(inputs) <= vp_dof
 
 
 cpdef list expr_solving(
-    ExpressionStack exprs,
-    dict mapping,
+    EStack exprs,
     object vpoints,
-    object angles = None
+    object inputs = None
 ):
-    """Solver function of Triangular method and BFGS method, for mechanism 
+    """Solver function of Triangular method and BFGS method, for mechanism
     expression `vpoints`.
 
     The triangle expression stack `expr` is generated from
-    [`vpoints_configure`](#vpoints_configure).
-
-    The information data `mapping` map the symbols to the indicator of 
-    `vpoints`,
-    additionally has a same format as argument `data_dict` in [SolverSystem].
+    [`t_config`](#t_config).
 
     Solver function will not handle slider input pairs in argument `angles`,
-    which is only support revolute joints. In another way, the slider input 
-    pairs
-    can be set by [`VPoint.disable_offset()`](#vpointdisable_offset) method.
+    which is only support revolute joints. In another way, the slider input
+    pairs can be set by [`VPoint.disable_offset()`](#vpointdisable_offset)
+    method.
     """
     # Blank sequences
-    if angles is None:
-        angles = []
-    data_dict, dof_input = data_collecting(exprs, mapping, vpoints)
-    # Check input number
-    cdef int dof = vpoint_dof(vpoints)
-    if dof_input > dof:
-        raise ValueError(
-            f"wrong number of input parameters: {dof_input} / {dof}"
-        )
-    # Reverse mapping, exclude specified link length
-    mapping_r = {v: k for k, v in mapping.items() if type(k) is int}
-    # Check input pairs
-    cdef int target
-    cdef Expression expr
-    for expr in exprs.stack:
-        if expr.func in {PLA, PLAP}:
-            if expr.func == PLA:
-                target = mapping_r[symbol_str(expr.c2)]
-            else:
-                target = mapping_r[symbol_str(expr.c3)]
-            if (
-                vpoints[mapping_r[symbol_str(expr.c1)]].grounded()
-                and vpoints[target].grounded()
-            ):
-                raise ValueError("wrong driver definition.")
-    # Angles
-    cdef double a
-    cdef int i
-    for i, a in enumerate(angles):
-        data_dict[f'a{i}'] = radians(a)
+    if inputs is None:
+        inputs = {}
+    cdef map[Sym, CCoord] joint_pos
+    cdef map[SwappablePair, double] link_len
+    cdef map[Sym, double] param
+    if not preprocessing(exprs, vpoints, inputs, joint_pos, link_len, param):
+        raise ValueError("wrong number of input parameters")
+    # Check coverage
+    status = {i: False for i in range(len(vpoints))}
+    cdef Expr e
+    for e in exprs.stack:
+        status[e.c1.second] = status[e.target.second] = True
+        if e.func in {PLAP, PLLP, PLPP, PALP}:
+            status[e.c2.second] = True
+            if e.func == PLPP:
+                status[e.c3.second] = True
+    cdef bint bfgs_mode = not all(status.values())
     # Solve
-    if not exprs.stack.empty():
-        expr_parser(exprs, data_dict)
-    p_data_dict = {}
-    cdef bint has_not_solved = False
-    # Add coordinate of known points.
-    for i in range(len(vpoints)):
-        # {1: 'A'} vs {'A': (10., 20.)}
-        if mapping[i] in data_dict:
-            p_data_dict[i] = data_dict[mapping[i]]
+    cdef ExprSolver solver = ExprSolver(exprs.stack, joint_pos, param)
+    if not solver.solve():
+        raise ValueError("solve failed")
+    # Use BFGS mode
+    cdef pair[Sym, CCoord] jp
+    if bfgs_mode:
+        data_dict = {}
+        for jp in solver.joint_pos:
+            if (
+                jp.first.first == P_LABEL
+                and status[jp.first.second]
+            ):
+                data_dict[jp.first.second] = Coord.__new__(Coord, jp.second.x,
+                                                           jp.second.y)
+        return SolverSystem(vpoints, inputs, data_dict).solve()
+    rt = []
+    cdef int i
+    cdef CCoord c
+    cdef VPoint vp
+    for i, vp in enumerate(vpoints):
+        c = solver.joint_pos[Sym(P_LABEL, i)]
+        if vp.is_slider():
+            rt.append(((vp.c[0, 0], vp.c[0, 1]), (c.x, c.y)))
         else:
-            has_not_solved = True
-    # Calling Sketch Solve kernel and try to get the result.
-    if has_not_solved:
-        # Add specified link lengths.
-        for k, v in mapping.items():
-            if type(k) is tuple:
-                p_data_dict[k] = v
-        # Solve
-        try:
-            solved_bfgs = SolverSystem(vpoints, {}, p_data_dict).solve()
-        except ValueError:
-            raise ValueError("result contains failure from sketch solve")
-    # Format:
-    # R joint: [[p0]: (p0_x, p0_y), [p1]: (p1_x, p1_y)]
-    # P or RP joint: [[p2]: ((p2_x0, p2_y0), (p2_x1, p2_y1))]
-    solved_points = []
-    cdef VPoint vpoint
-    cdef Coordinate coord
-    for i in range(len(vpoints)):
-        vpoint = vpoints[i]
-        if mapping[i] in data_dict:
-            # These points has been solved.
-            coord = data_dict[mapping[i]]
-            if coord.is_nan():
-                raise ValueError(f"result contains failure: Point{i}")
-            if vpoint.type == VJoint.R:
-                solved_points.append((coord.x, coord.y))
-            else:
-                solved_points.append((vpoint.c[0], (coord.x, coord.y)))
-        elif solved_bfgs is not None:
-            # These points solved by Sketch Solve.
-            if vpoint.type == VJoint.R:
-                solved_points.append(solved_bfgs[i])
-            else:
-                solved_points.append((solved_bfgs[i][0], solved_bfgs[i][1]))
-        else:
-            # No answer.
-            if vpoint.type == VJoint.R:
-                solved_points.append(vpoint.c[0])
-            else:
-                solved_points.append(vpoint.c)
-    return solved_points
+            rt.append((c.x, c.y))
+    return rt
+
+cdef (bint, map[Sym, CCoord]) quick_solve(
+    vector[Expr] stack,
+    map[Sym, CCoord] joint_pos,
+    map[Sym, double] param
+) nogil:
+    """Quick solving function.
+
+    !! Cython can not expose C external function to another pyx.
+    """
+    cdef ExprSolver s = ExprSolver(stack, joint_pos, param)
+    cdef bint ok = s.solve()
+    return ok, s.joint_pos

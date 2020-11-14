@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# cython: language_level=3
+# cython: language_level=3, cdivision=True, boundscheck=False, wraparound=False
+# cython: initializedcheck=False, nonecheck=False
 
 """Wrapper of BFGS algorithm.
 
@@ -15,22 +16,14 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 from libc.math cimport M_PI, cos, sin
 from libcpp.pair cimport pair
 from .sketch_solve cimport (
-    Rough,
-    Success,
-    PointOnPointConstraint,
-    P2PDistanceConstraint,
-    InternalAngleConstraint,
-    PointOnLineConstraint,
-    LineInternalAngleConstraint,
+    point_on_point,
+    p2p_distance,
+    internal_angle,
+    point_on_line,
+    line_internal_angle,
     solve,
 )
-from .expression cimport (
-    get_vlinks,
-    VJoint,
-    VPoint,
-    VLink,
-    Coordinate,
-)
+from .expression cimport get_vlinks, VJoint, VPoint, Coord
 
 
 cdef inline double *de_refer_post_inc(clist[double].iterator &it):
@@ -51,7 +44,6 @@ cdef inline double _radians(double degree):
 
 
 cdef class SolverSystem:
-
     """Sketch Solve solver.
 
     !!! note
@@ -61,18 +53,13 @@ cdef class SolverSystem:
     def __cinit__(self, object vpoints_, dict inputs = None, dict data_dict = None):
         self.vpoints = list(vpoints_)
         self.vlinks = {vlink.name: vlink for vlink in get_vlinks(self.vpoints)}
-        self.inputs = inputs
-        self.data_dict = data_dict
-        if self.inputs is None:
-            self.inputs = {}
-        if self.data_dict is None:
-            self.data_dict = {}
-
+        self.inputs = {} if inputs is None else inputs
+        self.data_dict = {} if data_dict is None else data_dict
         _sort_pairs(self.data_dict)
         self.build_expression()
 
     cpdef bint same_points(self, object vpoints_):
-        """Return True if two expressions are same."""
+        """Return true if two expressions are same."""
         cdef int i
         cdef VPoint p1, p2
         for i, p1 in enumerate(vpoints_):
@@ -91,6 +78,14 @@ cdef class SolverSystem:
         """
         return frozenset(self.data_dict)
 
+    cdef Point *point_ptr(self, int i, VLink vlink):
+        """Pick Point pointers."""
+        cdef VPoint vp = self.vpoints[i]
+        if i not in self.data_dict and vp.is_slot_link(vlink.name):
+            return &self.slider_bases[self.sliders[i]]
+        else:
+            return &self.points[i]
+
     cdef void build_expression(self):
         """Build the expression for solver at first time."""
         # Point parameters
@@ -98,10 +93,11 @@ cdef class SolverSystem:
         cdef double x, y
         cdef double *tmp_ptr
         cdef VPoint vpoint
-        cdef Coordinate coord
+        cdef Coord coord
         for i, vpoint in enumerate(self.vpoints):
             if vpoint.no_link():
-                x, y = vpoint.c[0]
+                x = vpoint.c[0, 0]
+                y = vpoint.c[0, 1]
                 self.constants.push_back(x)
                 tmp_ptr = &self.constants.back()
                 self.constants.push_back(y)
@@ -110,7 +106,8 @@ cdef class SolverSystem:
             if vpoint.grounded():
                 if self.check_known(i):
                     continue
-                x, y = vpoint.c[0]
+                x = vpoint.c[0, 0]
+                y = vpoint.c[0, 1]
                 self.constants.push_back(x)
                 tmp_ptr = &self.constants.back()
                 self.constants.push_back(y)
@@ -124,7 +121,8 @@ cdef class SolverSystem:
                     self.params.push_back(y + sin(vpoint.angle))
                     self.slider_slots.push_back([tmp_ptr, &self.params.back()])
                     # Pin is movable
-                    x, y = vpoint.c[1]
+                    x = vpoint.c[1, 0]
+                    y = vpoint.c[1, 1]
                     if vpoint.has_offset() and vpoint.true_offset() <= 0.1:
                         if vpoint.offset() > 0:
                             x += 0.1
@@ -141,7 +139,8 @@ cdef class SolverSystem:
                 continue
             if self.check_known(i):
                 continue
-            x, y = vpoint.c[0]
+            x = vpoint.c[0, 0]
+            y = vpoint.c[0, 1]
             self.params.push_back(x)
             tmp_ptr = &self.params.back()
             self.params.push_back(y)
@@ -156,14 +155,16 @@ cdef class SolverSystem:
                 self.slider_slots.push_back([tmp_ptr, &self.params.back()])
                 if vpoint.pin_grounded():
                     # Pin is fixed
-                    x, y = vpoint.c[1]
+                    x = vpoint.c[1, 0]
+                    y = vpoint.c[1, 1]
                     self.constants.push_back(x)
                     tmp_ptr = &self.constants.back()
                     self.constants.push_back(y)
                     self.points.push_back([tmp_ptr, &self.constants.back()])
                 else:
                     # Pin is movable
-                    x, y = vpoint.c[1]
+                    x = vpoint.c[1, 0]
+                    y = vpoint.c[1, 1]
                     if vpoint.has_offset() and vpoint.true_offset() <= 0.1:
                         if vpoint.offset() > 0:
                             x += 0.1
@@ -193,14 +194,8 @@ cdef class SolverSystem:
             if (a not in self.data_dict) or (b not in self.data_dict):
                 vp1 = self.vpoints[a]
                 vp2 = self.vpoints[b]
-                if a not in self.data_dict and vp1.is_slot_link(vlink.name):
-                    p1 = &self.slider_bases[self.sliders[a]]
-                else:
-                    p1 = &self.points[a]
-                if b not in self.data_dict and vp2.is_slot_link(vlink.name):
-                    p2 = &self.slider_bases[self.sliders[b]]
-                else:
-                    p2 = &self.points[b]
+                p1 = self.point_ptr(a, vlink)
+                p2 = self.point_ptr(b, vlink)
                 frozen_pair = frozenset({a, b})
                 if frozen_pair in self.data_dict:
                     x = self.data_dict[frozen_pair]
@@ -208,7 +203,7 @@ cdef class SolverSystem:
                     x = vp1.distance(vp2)
                     self.data_dict[frozen_pair] = x
                 self.data_values.push_back(x)
-                self.cons_list.push_back(P2PDistanceConstraint(p1, p2, &self.data_values.back()))
+                self.cons_list.push_back(p2p_distance(p1, p2, &self.data_values.back()))
             for c in vlink.points[2:]:
                 if c in self.data_dict:
                     # Known coordinate
@@ -216,14 +211,8 @@ cdef class SolverSystem:
                 for d in (a, b):
                     vp1 = self.vpoints[c]
                     vp2 = self.vpoints[d]
-                    if vp1.is_slot_link(vlink.name):
-                        p1 = &self.slider_bases[self.sliders[c]]
-                    else:
-                        p1 = &self.points[c]
-                    if (d not in self.data_dict) and vp2.is_slot_link(vlink.name):
-                        p2 = &self.slider_bases[self.sliders[d]]
-                    else:
-                        p2 = &self.points[d]
+                    p1 = self.point_ptr(c, vlink)
+                    p2 = self.point_ptr(d, vlink)
                     frozen_pair = frozenset({c, d})
                     if frozen_pair in self.data_dict:
                         x = self.data_dict[frozen_pair]
@@ -231,7 +220,7 @@ cdef class SolverSystem:
                         x = vp1.distance(vp2)
                         self.data_dict[frozen_pair] = x
                     self.data_values.push_back(x)
-                    self.cons_list.push_back(P2PDistanceConstraint(p1, p2, &self.data_values.back()))
+                    self.cons_list.push_back(p2p_distance(p1, p2, &self.data_values.back()))
         # Slider constraints
         cdef Line *slider_slot
         cdef pair[int, int] slider
@@ -245,17 +234,17 @@ cdef class SolverSystem:
             self.slider_lines.push_back([&self.slider_bases[b], &self.slider_slots[b]])
             slider_slot = &self.slider_lines.back()
             if vp1.grounded():
-                # Slot is grounded.
+                # Slot is grounded
                 self.constants.push_back(_radians(vp1.angle))
-                self.cons_list.push_back(LineInternalAngleConstraint(slider_slot, &self.constants.back()))
-                self.cons_list.push_back(PointOnLineConstraint(p1, slider_slot))
+                self.cons_list.push_back(line_internal_angle(slider_slot, &self.constants.back()))
+                self.cons_list.push_back(point_on_line(p1, slider_slot))
                 if vp1.has_offset():
                     p2 = &self.slider_bases[b]
                     if vp1.offset():
                         self.constants.push_back(vp1.offset())
-                        self.cons_list.push_back(P2PDistanceConstraint(p2, p1, &self.constants.back()))
+                        self.cons_list.push_back(p2p_distance(p2, p1, &self.constants.back()))
                     else:
-                        self.cons_list.push_back(PointOnPointConstraint(p2, p1))
+                        self.cons_list.push_back(point_on_point(p2, p1))
             else:
                 # Slider between links
                 for name in vp1.links[:1]:
@@ -276,19 +265,19 @@ cdef class SolverSystem:
                         p2 = &self.points[c]
                     self.slider_lines.push_back([&self.slider_bases[b], p2])
                     self.constants.push_back(_radians(vp1.slope_angle(vp2) - vp1.angle))
-                    self.cons_list.push_back(InternalAngleConstraint(
+                    self.cons_list.push_back(internal_angle(
                         slider_slot,
                         &self.slider_lines.back(),
                         &self.constants.back()
                     ))
-                    self.cons_list.push_back(PointOnLineConstraint(p1, slider_slot))
+                    self.cons_list.push_back(point_on_line(p1, slider_slot))
                     if vp1.has_offset():
                         p2 = &self.slider_bases[b]
                         if vp1.offset():
                             self.constants.push_back(vp1.offset())
-                            self.cons_list.push_back(P2PDistanceConstraint(p2, p1, &self.constants.back()))
+                            self.cons_list.push_back(p2p_distance(p2, p1, &self.constants.back()))
                         else:
-                            self.cons_list.push_back(PointOnPointConstraint(p2, p1))
+                            self.cons_list.push_back(point_on_point(p2, p1))
             if vp1.type != VJoint.P:
                 continue
             for name in vp1.links[1:]:
@@ -309,7 +298,7 @@ cdef class SolverSystem:
                     p2 = &self.points[c]
                 self.slider_lines.push_back([p1, p2])
                 self.constants.push_back(_radians(vp1.slope_angle(vp2) - vp1.angle))
-                self.cons_list.push_back(InternalAngleConstraint(
+                self.cons_list.push_back(internal_angle(
                     slider_slot,
                     &self.slider_lines.back(),
                     &self.constants.back()
@@ -321,7 +310,7 @@ cdef class SolverSystem:
                 continue
             self.handles.push_back([&self.points[b], &self.points[d]])
             self.inputs_angle.push_back(_radians(angle))
-            self.cons_list.push_back(LineInternalAngleConstraint(
+            self.cons_list.push_back(line_internal_angle(
                 &self.handles.back(),
                 &self.inputs_angle.back()
             ))
@@ -372,7 +361,7 @@ cdef class SolverSystem:
         cdef int i
         cdef double *handle
         cdef VPoint vpoint
-        cdef Coordinate coord
+        cdef Coord coord
         cdef clist[double].iterator it = self.data_values.begin()
         for i, vpoint in enumerate(self.vpoints):
             if vpoint.grounded():
@@ -390,7 +379,6 @@ cdef class SolverSystem:
                 handle[0] = coord.x
                 handle = de_refer_post_inc(it)
                 handle[0] = coord.y
-
         cdef int a, b, c, d
         cdef VLink vlink
         for vlink in self.vlinks.values():
@@ -398,7 +386,6 @@ cdef class SolverSystem:
                 continue
             if vlink.name == VLink.FRAME:
                 continue
-
             a = vlink.points[0]
             b = vlink.points[1]
             if (a not in self.data_dict) or (b not in self.data_dict):
@@ -427,7 +414,6 @@ cdef class SolverSystem:
         cdef size_t i
         for i in range(params_count):
             params_ptr[i] = de_refer_post_inc(it)
-
         # Pointer of constraints
         cdef size_t cons_count = <int>self.cons_list.size()
         cdef Constraint *cons = <Constraint *>PyMem_Malloc(sizeof(Constraint) * cons_count)
@@ -436,24 +422,34 @@ cdef class SolverSystem:
         for con in self.cons_list:
             cons[i] = con
             i += 1
-
         # Solve
-        cdef int flag = solve(params_ptr, params_count, cons, cons_count, Rough)
-        if flag == Success:
+        cdef bint flag = solve(params_ptr, params_count, cons, cons_count, False)
+        cdef VPoint vp
+        cdef Coord c
+        cdef Point p1, p2
+        if flag:
             solved_points = []
-            for i, vpoint in enumerate(self.vpoints):
-                if vpoint.type == VJoint.R:
-                    solved_points.append((self.points[i].x[0], self.points[i].y[0]))
+            for i, vp in enumerate(self.vpoints):
+                if i in self.data_dict or vp.no_link():
+                    if vp.no_link():
+                        c = Coord.__new__(Coord, vp.c[0, 0], vp.c[0, 1])
+                    else:
+                        c = self.data_dict[i]
+                    if vp.type == VJoint.R:
+                        solved_points.append((c.x, c.y))
+                    else:
+                        solved_points.append(((c.x, c.y), (c.x, c.y)))
+                    continue
+                p1 = self.points[i]
+                if vp.type == VJoint.R:
+                    solved_points.append((p1.x[0], p1.y[0]))
                 else:
-                    solved_points.append((
-                        (self.slider_bases[self.sliders[i]].x[0], self.slider_bases[self.sliders[i]].y[0]),
-                        (self.points[i].x[0], self.points[i].y[0])
-                    ))
-
+                    p2 = self.slider_bases[self.sliders[i]]
+                    solved_points.append(((p2.x[0], p2.y[0]),
+                                          (p1.x[0], p1.y[0])))
         PyMem_Free(params_ptr)
         PyMem_Free(cons)
-
-        if flag == Success:
+        if flag:
             return solved_points
         else:
             raise ValueError("no valid solutions were found from initialed values")

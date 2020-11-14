@@ -1,9 +1,71 @@
+# Version 20.11
+
++ Fix slider input function.
+
+# Version 20.10
+
++ Unify "true" and "false" to lowercase in docstring.
++ Remove "data_collecting" function.
++ Remove "expr_parser" function.
++ Add "VPoint.is_slider" method.
++ Improve performance of meta-heuristic algorithms.
+    + Release almost GIL, only left objective function.
+
+# Version 20.09
+
++ This version has been skipped.
+
+# Version 20.08
+
++ Change the definition of Path Signature: The mapping of stroke and curvature.
+
+# Version 20.07
+
++ Rename "Coordinate" to "Coord"(keep old name).
++ Add "sx" & "sy" properties for VPoint slot coordinate.
++ Add "link_pos" and "points_pos" methods for VPoint and VLink respectively.
++ Add "to_coord" method for VPoint objects.
++ Reduce unused code of Sketch Solve and redesign its API.
++ Add PPP function to solve parallel linkage.
++ Rename the module "topo_config".
+
+# Version 20.06
+
++ Support MSVC versions `1910`~`1916` and `1920`~`1926`.
++ Derivation will treat a path as a full stroke if difference is not the maximum.
++ Add function "PALP".
+
+# Version 20.05
+
++ Remove "return none" annotation from stubs.
++ A shell version of "set_pycompiler".
++ Support incomplete path works with derivative function.
+
+# Version 20.04
+
++ Fix the bug of topological algorithm.
++ Add `curvature`, `derivative` and `path_signature` functions.
+
+# Version 20.03
+
++ Allow case insensitive color name.
++ Merge `altas` and `number` module as `structural`.
++ Rename `planar_check` module to `graph_planar`.
++ Add ordered simples option of planar linkage synthesis.
++ Change several variable names of backend.
++ Move graph related modules into `pyslvs.graph` package.
++ New graph searching method for polygon link.
+    + Change triangular symbol "A" to "I" (input).
+    + Add symbol "A" (angle of polygon link).
+
 # Version 20.02
 
 + Change example list and collection list as a function.
 + Add an iterator for grabbing examples and collections names.
 + Function name typo corrections.
 + Add "get_include" function for setup.
++ "Shape only" synthesis mode.
++ DWT synthesis mode. (alpha)
 
 # Version 20.01
 
@@ -12,7 +74,7 @@
 
 # Version 19.12
 
-+ None
++ None.
 
 # Version 19.11
 
@@ -56,7 +118,7 @@
     + set_data
     + Add test cases for new methods.
 + Automatic fill up the link length options of data keys.
-+ Add "AlgorithmBase" class to share the same functions of three algorithms.
++ Add "Algorithm" class to share the same functions of three algorithms.
 + Add "slow down" option for algorithm stop limitations.
 + Member types optimization of algorithm classes.
 + Add "Horse leg" example.
@@ -71,7 +133,7 @@
 
 # Version 19.06
 
-+ None
++ None.
 
 # Version 19.05
 

@@ -1,12 +1,29 @@
 # -*- coding: utf-8 -*-
 
-from typing import Dict, Any
+from typing import Tuple, List, Dict, Iterable, Any
 from numpy import ndarray, double
-from .metaheuristics import Objective
+from .metaheuristics import ObjFunc
 
-class Planar(Objective[str]):
+_Coord = Tuple[float, float]
 
-    def __init__(self, mech: Dict[str, Any]) -> None:
+def norm_path(path: Iterable[_Coord], scale: float = 1) -> List[_Coord]:
+    ...
+
+def curvature(path: Iterable[_Coord]) -> ndarray:
+    ...
+
+def derivative(path: ndarray) -> ndarray:
+    ...
+
+def path_signature(k: ndarray, maximum: float = 100) -> ndarray:
+    ...
+
+def cross_correlation(p1: ndarray, p2: ndarray, t: float = 0.1) -> ndarray:
+    ...
+
+class FMatch(ObjFunc[str]):
+
+    def __init__(self, mech: Dict[str, Any]):
         """The constructor of objective object.
 
         Options of `mech_params`:
@@ -25,6 +42,8 @@ class Planar(Objective[str]):
             + type: List[float]
         + `lower`: The lower setting of variables, the length must same as variable array.
             + type: List[float]
+        + `shape_only`: Compare paths by shape only.
+            + type: bool
 
         Variable array:
 
@@ -34,12 +53,6 @@ class Planar(Objective[str]):
 
         In 1D array: `v = [x0, y0, ..., l0, l1, ..., a00, a01, ..., a10, a11, ...]`
         """
-        ...
-
-    def get_upper(self) -> ndarray:
-        ...
-
-    def get_lower(self) -> ndarray:
         ...
 
     def fitness(self, v: ndarray) -> double:

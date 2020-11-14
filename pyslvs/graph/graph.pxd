@@ -9,17 +9,15 @@ license: AGPL
 email: pyslvs@gmail.com
 """
 
-from libcpp.map cimport map as cmap
-from numpy cimport ndarray
+from libcpp.map cimport map
 
 ctypedef unsigned long long ullong
-ctypedef cmap[int, int] imap
+ctypedef map[int, int] imap
 
 cpdef list link_assortment(Graph g)
 cpdef list contracted_link_assortment(Graph g)
 
 cdef class Graph:
-
     # Graph(edges)
 
     cdef readonly tuple edges
@@ -35,7 +33,7 @@ cdef class Graph:
     cpdef tuple neighbors(self, int n)
     cpdef dict degrees(self)
     cpdef ullong degree_code(self)
-    cpdef ndarray adjacency_matrix(self)
+    cpdef double[:, :] adjacency_matrix(self)
 
     cpdef bint is_connected(self, int without=*)
     cpdef bint has_cut_link(self)

@@ -13,13 +13,13 @@ email: pyslvs@gmail.com
 """
 
 cimport cython
-from libcpp.pair cimport pair as cpair
+from libcpp.pair cimport pair
 import sys
 from typing import Tuple, Dict, Iterator
 from itertools import permutations, groupby
 from numpy import zeros, uint8 as np_uint
 
-ctypedef cpair[int, int] ipair
+ctypedef pair[int, int] ipair
 
 
 cpdef list link_assortment(Graph g):
@@ -104,7 +104,6 @@ cpdef list labeled_enumerate(Graph g):
 
 @cython.final
 cdef class Graph:
-
     """The undirected graph class, support multigraph."""
 
     def __cinit__(self, object edges):
@@ -175,7 +174,7 @@ cdef class Graph:
         !!! note
             DOF is the Degree of Freedoms to a mechanism.
 
-            In the [Graph] objects, all vertices will assumed as revolute 
+            In the [Graph] objects, all vertices will assumed as revolute
             joints (1 DOF).
 
             $$
@@ -259,14 +258,15 @@ cdef class Graph:
                 code += n2 in self.adj[n1]
         return code
 
-    cpdef ndarray adjacency_matrix(self):
+    cpdef double[:, :] adjacency_matrix(self):
         """Generate a adjacency matrix.
 
         Assume the matrix $A[i, j] = A[j, i]$.
         Where $A[i, j] = 1$ if edge `(i, j)` exist.
         """
         cdef int n = len(self.vertices)
-        cdef ndarray am = zeros((n, n), dtype=np_uint)
+        cdef double[:, :] am = zeros((n, n), dtype=np_uint)
+        cdef int n1, n2
         for n1, n2 in self.edges:
             am[n1, n2] += 1
             am[n2, n1] += 1
@@ -297,7 +297,7 @@ cdef class Graph:
         return len(vertices) == len(self.vertices)
 
     cpdef bint has_cut_link(self):
-        """Return True if the graph has any cut links."""
+        """Return true if the graph has any cut links."""
         cdef int n, d
         for n, d in self.degrees().items():
             # Only for multiple links.
@@ -308,7 +308,7 @@ cdef class Graph:
         return False
 
     cpdef bint is_degenerate(self):
-        """Return True if this kinematic chain is degenerate.
+        """Return true if this kinematic chain is degenerate.
 
         + Prue all multiple contracted links recursively.
         + Check the DOF of sub-graph if it is lower then zero.
@@ -336,7 +336,7 @@ cdef class Graph:
         return g.dof() < 1
 
     cpdef bint has_triangle(self):
-        """Return True if the graph has triangle."""
+        """Return true if the graph has triangle."""
         cdef int n1, n2
         for neighbors in self.adj.values():
             for n1 in neighbors:
@@ -348,7 +348,7 @@ cdef class Graph:
         return False
 
     cpdef bint is_isomorphic(self, Graph g):
-        """Return True if two graphs is isomorphic.
+        """Return true if two graphs is isomorphic.
 
         Default is using VF2 algorithm.
         """
@@ -407,7 +407,6 @@ cdef bint _is_adjacent(Graph g, int u, int v):
 
 @cython.final
 cdef class GraphMatcher:
-
     """GraphMatcher and GMState class from NetworkX.
 
     Copyright (C) 2007-2009 by the NetworkX maintainers
@@ -419,7 +418,6 @@ cdef class GraphMatcher:
     James P. Crutchfield, principal investigator.
     Complexity Sciences Center and Physics Department, UC Davis.
     """
-
     cdef Graph g1, g2
     cdef set g1_nodes, g2_nodes
     cdef dict core_1, core_2, inout_1, inout_2, mapping
@@ -612,7 +610,7 @@ cdef class GraphMatcher:
 
 @cython.final
 cdef class GMState:
-
+    """Graph matcher state."""
     cdef GraphMatcher gm
     cdef int g1_node, g2_node, depth
 

@@ -10,30 +10,20 @@ __email__ = "pyslvs@gmail.com"
 from typing import Tuple, Sized, Sequence
 from math import pi, sin, cos, atan2, degrees, radians
 from numpy import (
-    sqrt,
-    abs,
-    cos as np_cos,
-    sin as np_sin,
-    dot,
-    sum as np_sum,
-    array,
-    ndarray,
-    linspace,
-    zeros,
-    ones,
-    diff,
-    concatenate,
-    cumsum,
+    sqrt, abs, cos as np_cos, sin as np_sin, dot, sum as np_sum, array,
+    ndarray, linspace, zeros, ones, diff, concatenate, cumsum,
 )
 
 
-def efd_fitting(path: Sequence[Tuple[float, float]], n: int) -> ndarray:
+def efd_fitting(path: Sequence[Tuple[float, float]], n: int = 0) -> ndarray:
     """Curve fitting using Elliptical Fourier Descriptor.
 
-    The path `path` will be translate to Fourier descriptor coefficients,
-    then regenerate a new paths as a `n` x 4 NumPy array.
+    The path `path` will be translated to Fourier descriptor coefficients,
+    then regenerate a new path as a `n` x 4 NumPy array.
     """
     contour = array(path, dtype=float)
+    if n < 3:
+        n = len(contour)
     harmonic = _fourier_power(
         _calculate_efd(contour, _nyquist(contour)),
         _nyquist(contour)
@@ -83,7 +73,7 @@ def _normalize_efd(
         2 * (coeffs[0, 0] * coeffs[0, 1] + coeffs[0, 2] * coeffs[0, 3]),
         coeffs[0, 0] ** 2 - coeffs[0, 1] ** 2 + coeffs[0, 2] ** 2 - coeffs[0, 3] ** 2
     ) * 0.5
-    # Rotate all coefficients by theta_1.
+    # Rotate all coefficients by theta_1
     for n in range(coeffs.shape[0]):
         angle = (n + 1) * theta_1
         coeffs[n, :] = dot(
@@ -135,13 +125,13 @@ def _calculate_dc_coefficients(contour: ndarray) -> Tuple[float, float]:
     dxy = diff(contour, axis=0)
     dt = sqrt((dxy ** 2).sum(axis=1))
     t = concatenate(([0], cumsum(dt)))
-    zt = t[-1] or 1e-6
+    zt = t[-1] or 1e-12
     diffs = diff(t ** 2)
     xi = cumsum(dxy[:, 0]) - dxy[:, 0] / dt * t[1:]
     a0 = 1 / zt * np_sum(dxy[:, 0] / (2 * dt) * diffs + xi * dt)
     delta = cumsum(dxy[:, 1]) - dxy[:, 1] / dt * t[1:]
     c0 = 1 / zt * np_sum(dxy[:, 1] / (2 * dt) * diffs + delta * dt)
-    # A0 and CO relate to the first point of the contour array as origin.
+    # A0 and CO relate to the first point of the contour array as origin
     # Adding those values to the coefficients to make them relate to true origin
     return contour[0, 0] + a0, contour[0, 1] + c0
 

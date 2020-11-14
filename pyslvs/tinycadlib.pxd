@@ -9,18 +9,63 @@ license: AGPL
 email: pyslvs@gmail.com
 """
 
-from .triangulation cimport ExpressionStack
-from .expression cimport Coordinate
+from libcpp.pair cimport pair
+from libcpp.map cimport map
+from libcpp.vector cimport vector
+from .topo_config cimport EStack
 
-cdef double radians(double degree) nogil
-cpdef Coordinate plap(Coordinate c1, double d0, double a0, Coordinate c2=*, bint inverse=*)
-cpdef Coordinate pllp(Coordinate c1, double d0, double d1, Coordinate c2, bint inverse=*)
-cpdef Coordinate plpp(Coordinate c1, double d0, Coordinate c2, Coordinate c3, bint inverse=*)
-cpdef Coordinate pxy(Coordinate c1, double x, double y)
+cdef extern from "tinycadlib/solver.h" nogil:
+    struct SwappablePair:
+        int first, second
 
-cdef str str_between(str s, str front, str back)
-cdef str str_before(str s, str front)
+    enum Label:
+        P_LABEL
+        L_LABEL
+        I_LABEL
+        A_LABEL
+        S_LABEL
 
-cpdef void expr_parser(ExpressionStack exprs, dict data_dict)
-cpdef tuple data_collecting(ExpressionStack exprs, dict mapping, object vpoints_)
-cpdef list expr_solving(ExpressionStack exprs, dict mapping, object vpoints, object angles=*)
+    enum Func:
+        PXY
+        PPP
+        PLA
+        PLAP
+        PLLP
+        PLPP
+        PALP
+
+    struct CCoord:
+        double x, y
+
+    CCoord cpxy(CCoord c1, double x, double y)
+    CCoord cppp(CCoord c1, CCoord c2, CCoord c3)
+    CCoord cplap(CCoord c1, double d0, double a0, CCoord c2, bint inverse)
+    CCoord cpllp(CCoord c1, double d0, double d1, CCoord c2, bint inverse)
+    CCoord cplpp(CCoord c1, double d0, CCoord c2, CCoord c3, bint inverse)
+    CCoord cpalp(CCoord c1, double a0, double d0, CCoord c2, bint inverse)
+
+    ctypedef pair[int, int] Sym
+
+    struct Expr:
+        bint op
+        Func func
+        Sym v1, v2, c1, c2, c3, target
+
+    cppclass ExprSolver:
+        map[Sym, CCoord] joint_pos
+
+        ExprSolver()
+        ExprSolver(vector[Expr] stack, map[Sym, CCoord] joint_pos,
+                   map[Sym, double] param)
+        bint solve()
+
+cdef bint preprocessing(EStack exprs, object vpoints, object inputs,
+                        map[Sym, CCoord] & joint_pos,
+                        map[SwappablePair, double] & link_len,
+                        map[Sym, double] & param)
+cpdef list expr_solving(EStack exprs, object vpoints, object inputs=*)
+cdef (bint, map[Sym, CCoord]) quick_solve(
+    vector[Expr] stack,
+    map[Sym, CCoord] joint_pos,
+    map[Sym, double] param
+) nogil
