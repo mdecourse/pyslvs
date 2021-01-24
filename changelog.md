@@ -1,3 +1,15 @@
+# Version 21.01
+
++ Add examples:
+    + Stephenson III (slider)
+    + Watt II (slider)
++ Remove "Coordinate" name alignment to "Coord".
++ Follows PEP517.
+
+# Version 20.12
+
++ Add uniform four-bar linkage function.
+
 # Version 20.11
 
 + Fix slider input function.

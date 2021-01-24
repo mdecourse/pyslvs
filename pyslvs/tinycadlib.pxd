@@ -4,7 +4,7 @@
 """Sharing position analysis function.
 
 author: Yuan Chang
-copyright: Copyright (C) 2016-2020
+copyright: Copyright (C) 2016-2021
 license: AGPL
 email: pyslvs@gmail.com
 """
@@ -64,8 +64,6 @@ cdef bint preprocessing(EStack exprs, object vpoints, object inputs,
                         map[SwappablePair, double] & link_len,
                         map[Sym, double] & param)
 cpdef list expr_solving(EStack exprs, object vpoints, object inputs=*)
-cdef (bint, map[Sym, CCoord]) quick_solve(
-    vector[Expr] stack,
-    map[Sym, CCoord] joint_pos,
-    map[Sym, double] param
-) nogil
+cdef (bint, map[Sym, CCoord]) quick_solve(vector[Expr] stack,
+                                          map[Sym, CCoord] joint_pos,
+                                          map[Sym, double] param) nogil

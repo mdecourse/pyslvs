@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from typing import Tuple, List, Sequence, Mapping, Union, Optional
+from numpy import ndarray
 from .topo_config import EStack
 from .expression import VPoint, Coord
 
@@ -40,4 +41,10 @@ def expr_solving(
     vpoints: Sequence[VPoint],
     angles: Optional[Mapping[Tuple[int, int], float]] = None
 ) -> List[Union[_Coord, Tuple[_Coord, _Coord]]]:
+    ...
+
+def uniform_four_bar(ml: float, n: int) -> ndarray:
+    ...
+
+def uniform_path(dimension: ndarray, n: int) -> ndarray:
     ...

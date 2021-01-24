@@ -5,14 +5,16 @@
 """Tiny CAD library of PMKS symbolic and position analysis.
 
 author: Yuan Chang
-copyright: Copyright (C) 2016-2020
+copyright: Copyright (C) 2016-2021
 license: AGPL
 email: pyslvs@gmail.com
 """
 
-from libc.math cimport M_PI, sin, cos
+from libc.math cimport M_PI, NAN, sin, cos
 from .expression cimport Coord, VJoint, VPoint, VLink, distance, slope_angle
 from .bfgs cimport SolverSystem
+from numpy import zeros, arange, array
+from numpy.random import uniform
 
 
 def pxy(Coord c1, double x, double y):
@@ -344,6 +346,7 @@ cpdef list expr_solving(
             rt.append((c.x, c.y))
     return rt
 
+
 cdef (bint, map[Sym, CCoord]) quick_solve(
     vector[Expr] stack,
     map[Sym, CCoord] joint_pos,
@@ -356,3 +359,73 @@ cdef (bint, map[Sym, CCoord]) quick_solve(
     cdef ExprSolver s = ExprSolver(stack, joint_pos, param)
     cdef bint ok = s.solve()
     return ok, s.joint_pos
+
+
+def uniform_four_bar(double ml, int n):
+    """Generate n four bar mechanisms from maximum lengths.
+
+    These mechanisms have coupling points.
+    Normalized parameters are $[L_0, L_2, L_3, L_4, \alpha]$.
+
+    ![pxy](img/uniform_four_bar.png)
+    """
+    return array(_uniform_four_bar(ml, n))
+
+
+cdef double[:, :] _uniform_four_bar(double ml, int n):
+    """Uniform four-bar implementation."""
+    cdef double[:, :] d = uniform(1., ml, (n, 5))
+    cdef int i
+    for i in range(n):
+        while not d[i, 0] + d[i, 2] > 1 + d[i, 1]:
+            for j in range(4):
+                d[i, j] = uniform(1., ml)
+        d[i, 4] = uniform(1., 2 * M_PI)
+    return d
+
+
+def uniform_path(double[:, :] dimension, int n):
+    """Generate path with four-bar dimensions.
+
+    Normalized parameters are $[L_0, L_2, L_3, L_4, \alpha]$.
+    """
+    return array(_uniform_path(dimension, n))
+
+
+cdef double[:, :, :] _uniform_path(double[:, :] dimension, int n):
+    """Uniform path implementation."""
+    cdef double[:, :, :] p = zeros((dimension.shape[0], n, 2))
+    cdef vector[Expr] stack
+    stack.push_back(Expr(False, PLA, Sym(L_LABEL, 1), Sym(I_LABEL, 0),
+                         Sym(P_LABEL, 0), Sym(), Sym(), Sym(P_LABEL, 2)))
+    stack.push_back(Expr(False, PLLP, Sym(L_LABEL, 2), Sym(L_LABEL, 3),
+                         Sym(P_LABEL, 2), Sym(P_LABEL, 1), Sym(),
+                         Sym(P_LABEL, 3)))
+    stack.push_back(Expr(False, PLAP, Sym(L_LABEL, 4), Sym(A_LABEL, 0),
+                         Sym(P_LABEL, 2), Sym(P_LABEL, 3), Sym(),
+                         Sym(P_LABEL, 4)))
+    cdef map[Sym, CCoord] joint_pos
+    joint_pos[Sym(P_LABEL, 0)] = CCoord(0, 0)
+    cdef map[Sym, double] param
+    param[Sym(L_LABEL, 1)] = 1.
+    cdef bint ok
+    cdef int i, j, k
+    cdef double a
+    cdef CCoord c
+    cdef map[Sym, CCoord] ans
+    for i in range(len(dimension)):
+        joint_pos[Sym(P_LABEL, 1)] = CCoord(dimension[i, 0], 0)
+        for k in range(1, 4):
+            param[Sym(L_LABEL, k + 1)] = dimension[i, k]
+        param[Sym(A_LABEL, 0)] = dimension[i, 5]
+        for j, a in enumerate(arange(0, 2 * M_PI, 2 * M_PI / n)):
+            param[Sym(I_LABEL, 0)] = a
+            ok, ans = quick_solve(stack, joint_pos, param)
+            if ok:
+                c = ans[Sym(P_LABEL, 4)]
+                p[i, j, 0] = c.x
+                p[i, j, 1] = c.y
+            else:
+                p[i, j, 0] = NAN
+                p[i, j, 1] = NAN
+    return p

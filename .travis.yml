@@ -5,14 +5,10 @@ dist: xenial
 
 jobs:
   include:
-    - &linux
-      python: "3.7"
-
-    - <<: *linux
-      python: "3.8"
-
-    - <<: *linux
-      python: "3.9"
+    # linux
+    - python: "3.7"
+    - python: "3.8"
+    - python: "3.9"
 
     - &win
       os: windows
@@ -29,10 +25,10 @@ jobs:
         - export PATH=${PYDIR}:${PYDIR}/Scripts:${PATH}
         - sh ./platform/set_pycompiler.sh ${PYDIR} ${COMPILER}
         - cp ${PYDIR}/python.exe ${PYDIR}/python3.exe
-        - python3 -m pip install pip -U
+        - python3 -m pip install pip setuptools -U
         - python3 --version
         - python3 -m pip --version
-        - python3 -m pip install -r requirements.txt -U
+        - python3 -m pip install -e . -U
         # Select Msys2
         - export PATH=/c/tools/msys64/mingw64/bin:${PATH}
       before_cache:
@@ -72,31 +68,8 @@ jobs:
         - PY=39
         - COMPILER=msvc
 
-    - &osx
-      os: osx
-      osx_image: xcode10
-      language: generic
-      env: PYTHON=3.7.0
-      before_install:
-        - brew update
-        - brew upgrade pyenv || true
-        - brew install llvm libomp
-        - export PATH="/usr/local/opt/llvm/bin:/Users/travis/.pyenv/shims:${PATH}"
-        - pyenv install ${PYTHON}
-        - pyenv global ${PYTHON}
-        - python3 -m pip install pip -U
-        - python3 --version
-        - python3 -m pip --version
-        - python3 -m pip install -r requirements.txt -U
-
-    - <<: *osx
-      env: PYTHON=3.8.5
-
-    - <<: *osx
-      env: PYTHON=3.9.0
-
 script:
-  - python3 setup.py install
+  - python3 -m pip install -e . -U
   - python3 test
 
 before_cache:
